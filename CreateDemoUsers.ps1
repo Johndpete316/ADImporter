@@ -22,7 +22,9 @@ Push-Location (Split-Path ($MyInvocation.MyCommand.Path))
 # Global variables
 #
 # User properties
+$CreateGroup = $true                        # Create a group for the users based on the department
 $ou = "OU=YourOUHere,DC=AC,DC=Local"         # Which OU to create the user in
+$groupOU = "OU=YourOUHere,DC=safesec,DC=local"   # Which OU to create the user in
 $initialPassword = "Password1"               # Initial password set for the user
 $orgShortName = "AC"                         # This is used to build a user's sAMAccountName
 $dnsDomain = "AC.local"                      # Domain is used for e-mail address and UPN
@@ -144,6 +146,22 @@ if ($i -lt $userCount)
    $department = $departments[$departmentIndex].Name
    $title = $departments[$departmentIndex].Positions[$(Get-Random -Minimum 0 -Maximum $departments[$departmentIndex].Positions.Count)]
 
+   # Create AD Group for each department if it doesn't exist
+   if($CreateGroup) {
+      $groupExists = $false
+      $groupname = "FS_" + $department + "_Group" -replace '[\W]', '' # cleanup formating for department names with spaces and special characters
+
+      Try   { $groupExists = Get-ADGroup -LDAPFilter "(sAMAccountName=$groupname)" }
+      Catch { }  
+
+      if(-not $groupExists)
+      {
+         New-ADGroup -Name $groupname -GroupScope Global -GroupCategory Security -DisplayName $groupname -Path $groupOU
+         Write-Host "Created group $groupname"
+      }
+   }
+
+
    # Phone number
    if ($matchcc.Name -notcontains $country)
    {
@@ -175,8 +193,9 @@ if ($i -lt $userCount)
    # Create the user account
    #
       New-ADUser -SamAccountName $sAMAccountName -Name $displayName -Path $ou -AccountPassword $securePassword -Enabled $true -GivenName $Fname -Surname $Lname -DisplayName $displayName -EmailAddress "$Fname.$Lname@$dnsDomain" -StreetAddress $street -City $city -PostalCode $postalCode -State $state -Country $country -UserPrincipalName "$sAMAccountName@$dnsDomain" -Company $company -Department $department -EmployeeNumber $employeeNumber -Title $title -OfficePhone $officePhone
+      Add-ADGroupMember -Identity $groupname -Members $sAMAccountName # add new user to department group
 
-   "Created user #" + ($i+1) + ", $displayName, $sAMAccountName, $title, $department, $officePhone, $country, $street, $city"
+   "Created user #" + ($i+1) + ", $displayName, $sAMAccountName, $title, $department, $officePhone, $country, $street, $city and added to $groupname"
    $i = $i+1
    $employeeNumber = $employeeNumber+1
 
